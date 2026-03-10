@@ -39,9 +39,12 @@ jobs:
           pip install --upgrade pip 'setuptools>=77,<81' wheel cython
 
       - name: Build grpcio wheel
+        env:
+          GRPC_PYTHON_BUILD_WITH_CYTHON: "1"
+          GRPC_PYTHON_BUILD_SYSTEM_OPENSSL: "1"
+          GRPC_PYTHON_BUILD_SYSTEM_ZLIB: "1"
         run: |
           . /tmp/build-venv/bin/activate
-          cd src/python/grpcio
           pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels/ .
 
       - name: Verify platform tag
