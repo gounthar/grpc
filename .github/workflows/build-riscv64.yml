@@ -39,8 +39,8 @@ jobs:
         run: |
           uv venv /tmp/build-venv
           . /tmp/build-venv/bin/activate
-          uv pip install 'setuptools>=77,<81' wheel cython
-          uv pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels/ .
+          uv pip install 'setuptools>=77,<81' wheel cython pip
+          pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels/ .
 
       - name: Verify platform tag
         run: |
