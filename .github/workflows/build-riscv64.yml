@@ -12,7 +12,7 @@ on:
 
 jobs:
   build:
-    runs-on: [self-hosted, linux, riscv64]
+    runs-on: ubuntu-24.04-riscv
     timeout-minutes: 240
     env:
       GRPC_PYTHON_BUILD_WITH_CYTHON: "1"
@@ -32,20 +32,15 @@ jobs:
           sudo apt-get install -y build-essential cmake libssl-dev zlib1g-dev \
             libre2-dev libabsl-dev pkg-config python3-dev
 
-      - name: Set up Python
-        run: |
-          python3 -m venv /tmp/build-venv
-          . /tmp/build-venv/bin/activate
-          pip install --upgrade pip 'setuptools>=77,<81' wheel cython
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
 
       - name: Build grpcio wheel
-        env:
-          GRPC_PYTHON_BUILD_WITH_CYTHON: "1"
-          GRPC_PYTHON_BUILD_SYSTEM_OPENSSL: "1"
-          GRPC_PYTHON_BUILD_SYSTEM_ZLIB: "1"
         run: |
+          uv venv /tmp/build-venv
           . /tmp/build-venv/bin/activate
-          pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels/ .
+          uv pip install 'setuptools>=77,<81' wheel cython
+          uv pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels/ .
 
       - name: Verify platform tag
         run: |
@@ -72,7 +67,7 @@ jobs:
 
   release:
     needs: build
-    runs-on: [self-hosted, linux, riscv64]
+    runs-on: ubuntu-24.04-riscv
     if: success()
     env:
       GH_REPO: ${{ github.repository }}
@@ -114,8 +109,7 @@ jobs:
             --title "$TITLE" \
             --notes "Prebuilt riscv64 wheel for grpcio.
 
-          Built on: BananaPi F3 (SpacemiT K1, rv64imafdcv)
-          Python: $(python3 --version 2>&1)
+          Built on: RISE riscv64 runner (ubuntu-24.04-riscv)
           Wheel: ${{ steps.wheel_info.outputs.whl_name }}
 
           Install:
@@ -128,17 +122,3 @@ jobs:
       - name: Cleanup
         if: always()
         run: rm -rf /tmp/wheels
-
-  notify-index:
-    needs: release
-    runs-on: ubuntu-latest
-    if: success()
-    steps:
-      - name: Trigger index update
-        env:
-          GH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
-        run: |
-          gh api repos/gounthar/riscv64-python-wheels/dispatches \
-            -f event_type=fork-release-published \
-            -f "client_payload[repo]=${{ github.repository }}" \
-            -f "client_payload[tag]=${{ github.ref_name }}"
