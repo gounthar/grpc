@@ -14,17 +14,52 @@ jobs:
   build:
     runs-on: ubuntu-24.04-riscv
     timeout-minutes: 240
+    # The build job only reads the repo, fetches an upstream tag and uploads an
+    # artifact. It never writes back. The release job below is the only writer.
+    permissions:
+      contents: read
     env:
       GRPC_PYTHON_BUILD_WITH_CYTHON: "1"
       GRPC_PYTHON_BUILD_SYSTEM_OPENSSL: "1"
       GRPC_PYTHON_BUILD_SYSTEM_ZLIB: "1"
     steps:
-      - name: Checkout
+      # Check out the fork (default branch) with submodules. When a specific
+      # upstream release tag is requested, fetch that tag from upstream and
+      # check it out in place. We deliberately do not push the upstream tag to
+      # the fork: the GITHUB_TOKEN is not allowed to write files under
+      # .github/workflows/, and upstream release tags carry their own workflow
+      # files, so the push is rejected. Building from the tag in the working
+      # tree avoids that entirely.
+      - name: Checkout default branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.release_tag || github.ref }}
+          ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
           submodules: recursive
+
+      - name: Check out upstream release tag
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          TAG: ${{ inputs.release_tag }}
+          UPSTREAM: https://github.com/grpc/grpc.git
+        run: |
+          set -euo pipefail
+          # Reject anything that is not a plain tag name (no leading '-', no
+          # whitespace or shell/git option characters) so the value can never
+          # be parsed as a git option such as --upload-pack=...
+          if ! printf '%s' "${TAG}" | grep -Eq '^[A-Za-z0-9._/-]+$' \
+              || printf '%s' "${TAG}" | grep -Eq '^-'; then
+            echo "Refusing suspicious release_tag: ${TAG}" >&2
+            exit 1
+          fi
+          git remote add upstream "${UPSTREAM}"
+          # '--' terminates option parsing; the tag can only be read as a ref.
+          git fetch upstream tag "${TAG}"
+          git checkout --detach "refs/tags/${TAG}" --
+          # Pick up any submodule URL/commit changes the upstream tag introduced.
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          echo "Building from upstream tag ${TAG}."
 
       - name: Install system dependencies
         run: |
